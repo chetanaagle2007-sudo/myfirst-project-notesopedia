@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #E4E3E0;
+    --ink: #141414;
+    --line: #141414;
+    --f-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --f-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --f-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--f-sans);
+    min-height: 100vh;
+    margin: 0;
+  }
+}
+
+/* Custom styles for high-contrast technical grid borders */
+.tech-border {
+  border: 1.5px solid var(--ink);
+}
+
+.tech-border-b {
+  border-bottom: 1.5px solid var(--ink);
+}
+
+.tech-border-r {
+  border-right: 1.5px solid var(--ink);
+}
+
+.tech-border-l {
+  border-left: 1.5px solid var(--ink);
+}
+
+.tech-border-t {
+  border-top: 1.5px solid var(--ink);
+}
+
+/* Selection state matching theme */
+.active-tech-tab {
+  background-color: var(--ink);
+  color: var(--bg);
+}
+
+/* Custom scrollbars matching the typewriter aesthetic */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink);
+}
