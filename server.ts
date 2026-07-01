@@ -4,150 +4,153 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, getDocs, doc, setDoc, deleteDoc, updateDoc, writeBatch, runTransaction, getDoc } from "firebase/firestore";
 
 // Load environment variables
 dotenv.config();
+
+// Clean GEMINI_API_KEY if there are quotes or whitespace
+if (process.env.GEMINI_API_KEY) {
+  process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY.trim();
+  if (process.env.GEMINI_API_KEY.startsWith('"') && process.env.GEMINI_API_KEY.endsWith('"')) {
+    process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY.slice(1, -1);
+  } else if (process.env.GEMINI_API_KEY.startsWith("'") && process.env.GEMINI_API_KEY.endsWith("'")) {
+    process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY.slice(1, -1);
+  }
+}
+
+console.log("🔑 [SYSTEM CONFIG] Environment Variables Check:");
+if (process.env.GEMINI_API_KEY) {
+  const k = process.env.GEMINI_API_KEY;
+  console.log(`   - GEMINI_API_KEY: Present (Length: ${k.length}, Starts with: "${k.substring(0, Math.min(4, k.length))}...", Ends with: "...${k.substring(Math.max(0, k.length - 4))}")`);
+} else {
+  console.log("   - GEMINI_API_KEY: NOT DEFINED or empty.");
+}
 
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
 
-// Persistent user notes file path
+// Persistent user notes backup path (local failover)
 const NOTES_FILE_PATH = path.join(process.cwd(), "user_notes.json");
+const CONFIG_FILE_PATH = path.join(process.cwd(), "system_config.json");
 
-// Default template notes to populate the repository initially
-const DEFAULT_NOTES = [
+// Default universal seed notes
+const DEFAULT_UNIVERSAL_NOTES = [
   {
-    id: "note-1",
-    title: "Deep Dive into ACID Transactions & Concurrency Control",
-    content: "ACID properties ensure relational databases handle errors gracefully. \n\n### Atomicity\nAll changes in a transaction must complete successfully, or all are rolled back. This is managed via the **Undo Log**.\n\n### Consistency\nEnforces rules (constraints, keys, check constraints) from one valid state to another.\n\n### Isolation\nEnsures concurrent execution of transactions leaves the database in the same state as if they were executed sequentially. Isolated levels include Read Uncommitted, Read Committed, Repeatable Read, and Serializable.\n\n### Durability\nGuarantees that committed transaction data is permanently written to disk, typically achieved using **Write-Ahead Logging (WAL)** or transaction logs so it survives power losses.",
-    subjectName: "Relational Database Management Systems",
-    subjectCode: "2505MJCT201",
-    topicName: "ACID Properties & Recovery",
-    uploaderName: "Prof. Rajesh Kumar",
+    id: "univ-note-1",
+    title: "Understanding Graph Traversal: BFS vs DFS Algorithms",
+    content: "Graph traversal forms the core of network analysis, routing, and search space discovery.\n\n### Breadth-First Search (BFS)\n- **Strategy**: Explores level-by-level, visiting all neighbor vertices of a node before moving to deeper levels.\n- **Data Structure**: Uses a **Queue** (First-In, First-Out).\n- **Complexity**: $O(V + E)$ where $V$ is vertices and $E$ is edges.\n- **Key Use Case**: Finding the absolute shortest path on unweighted graphs.\n\n### Depth-First Search (DFS)\n- **Strategy**: Plunges as deep as possible along each branch before backtracking.\n- **Data Structure**: Uses a **Stack** (implicitly via recursion or explicitly).\n- **Complexity**: $O(V + E)$.\n- **Key Use Case**: Topological sorting, checking for cycles, and solving mazes.\n\n```python\n# Basic recursive DFS representation in Python\ndef dfs(graph, node, visited=None):\n    if visited is None:\n        visited = set()\n    if node not in visited:\n        print(f'Visiting vertex: {node}')\n        visited.add(node)\n        for neighbor in graph[node]:\n            dfs(graph, neighbor, visited)\n    return visited\n```",
+    subjectName: "Data Structures & Algorithms",
+    subjectCode: "CS-201",
+    topicName: "Graph Algorithms",
+    uploaderName: "Dr. Alisha Vance",
     uploaderRole: "Professor",
-    uploaderEmail: "rkumar@university.edu",
+    uploaderEmail: "alisha.vance@university.edu",
     uploadedAt: "2026-06-29T10:30:00.000Z",
-    likes: 12
+    likes: 42
   },
   {
-    id: "note-2",
-    title: "SQL Indexing Performance: B-Tree vs Hash Indexes",
-    content: "When should you use which index? Let's analyze the disk IO performance:\n\n1. **B-Tree Indexes** (Default in PostgreSQL/Oracle):\n   - **Time Complexity**: O(log N) for Search, Insert, Delete.\n   - **Best Used For**: Range queries (e.g., `WHERE age BETWEEN 20 AND 30`), equality lookup, and sorted results (`ORDER BY`).\n   - **Structure**: Balanced tree with high fanout, keeping depth low (usually 3-4 levels) to minimize disk page fetches.\n\n2. **Hash Indexes**:\n   - **Time Complexity**: O(1) average lookup.\n   - **Best Used For**: Strictly equality comparison queries (e.g., `WHERE status = 'ACTIVE'`).\n   - **Limitations**: Cannot be used for range queries or index-sorted retrieval.\n\n*Pro-Tip*: PostgreSQL B-Trees also support index-only scans when selecting columns fully covered by the index structure.",
-    subjectName: "Database Systems & Administration",
-    subjectCode: "CS-302",
-    topicName: "Index Optimization & Disk Storage",
+    id: "univ-note-2",
+    title: "The Schrödinger Equation & Wave Functions Demystified",
+    content: "The Schrödinger Equation represents the cornerstone of modern quantum mechanics, describing how the quantum state of a physical system changes over time.\n\n### Time-Independent Schrödinger Equation\n$$\\hat{H}\\psi = E\\psi$$\n- $\\hat{H}$ is the Hamiltonian Operator (representing total energy).\n- $\\psi$ is the Wave Function (describes spatial probability amplitude).\n- $E$ is the total energy eigenvalue.\n\n### Interpretations of the Wave Function\nMax Born proposed that the square of the magnitude of the wave function, $|\\psi(x)|^2$, represents the probability density of finding a particle at a given coordinate $x$ at a specific time.\n\n- **Normalisation**: The probability of finding the particle *somewhere* in the universe must sum to 1.\n$$\\int_{-\\infty}^{\\infty} |\\psi(x)|^2 dx = 1$$",
+    subjectName: "Advanced Quantum Mechanics",
+    subjectCode: "PHYS-402",
+    topicName: "Quantum Foundations",
     uploaderName: "Chetana Agle",
     uploaderRole: "Lead TA",
     uploaderEmail: "chetanaagle2007@gmail.com",
     uploadedAt: "2026-06-30T04:15:00.000Z",
-    likes: 24
+    likes: 38
   },
   {
-    id: "note-3",
-    title: "Normal Forms Quick Sheet (1NF to BCNF)",
-    content: "Use this simple checklist for normalization exam questions:\n\n- **1NF**: Atomic values only. No repeating columns or array-like values.\n- **2NF**: In 1NF + **No partial dependency** (non-key columns must depend on the *entire* primary key, not a subset of a composite key).\n- **3NF**: In 2NF + **No transitive dependency** (non-key columns cannot depend on other non-key columns).\n- **BCNF**: Must be in 3NF + For every functional dependency `A -> B`, `A` must be a super key.",
-    subjectName: "Relational Database Management Systems",
-    subjectCode: "2505MJCT201",
-    topicName: "Database Normalization",
+    id: "univ-note-3",
+    title: "Key Macroeconomic Indicators & Policy Impacts",
+    content: "How governments manipulate variables to direct national markets:\n\n1. **Gross Domestic Product (GDP)**:\n   $$GDP = C + I + G + (X - M)$$\n   - $C$: Private Consumption\n   - $I$: Capital Investments\n   - $G$: Government Spending\n   - $(X-M)$: Net Exports (Exports minus Imports)\n\n2. **Fiscal Policy Tools**:\n   - **Taxation Changes**: Adjusts consumer disposable income and spending power.\n   - **Government Investment**: Directly stimulates target industries and increases public employment.\n\n3. **Monetary Policy Tools** (Managed by Central Banks):\n   - **Reserve Requirements**: Minimum liquid cash reserves banks must hold.\n   - **Discount Rate**: The lending rate charged to commercial entities.\n   - **Open Market Operations**: Buying/selling treasury bills to influence cash liquidity.",
+    subjectName: "Macroeconomic Theory",
+    subjectCode: "ECON-101",
+    topicName: "Economic Indicators",
     uploaderName: "Amit Sharma",
     uploaderRole: "Student",
     uploaderEmail: "amit.sharma99@student.edu",
     uploadedAt: "2026-06-30T07:45:00.000Z",
-    likes: 7
+    likes: 19
   }
 ];
 
-// Helper to read notes
+const DEFAULT_CONFIG = {
+  announcement: "🎓 Welcome to the new Notsopedia Universal Hub! Download community notes, access the Live AI Search, and share research notes permanently.",
+  announcementActive: true,
+  enableSimulator: false,
+  enableSubmissions: true
+};
+
+// ----------------- FIRESTORE SETUP -----------------
+let db: any = null;
+let useFirestore = false;
+
+try {
+  const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8"));
+  const firebaseApp = initializeApp(firebaseConfig);
+  db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+  useFirestore = true;
+  console.log("🔥 Connected to Google Cloud Firestore database successfully via Web SDK.");
+} catch (err) {
+  console.warn("⚠️ Local mode: Firestore failed to initialize, using local files fallback.", err);
+  useFirestore = false;
+}
+
+// Seeding Firestore helper
+async function seedFirestoreIfNeeded() {
+  if (!useFirestore || !db) return;
+  try {
+    const notesCol = collection(db, "notes");
+    const snapshot = await getDocs(notesCol);
+    if (snapshot.empty) {
+      console.log("📥 Seeding default universal notes to Cloud Firestore...");
+      for (const note of DEFAULT_UNIVERSAL_NOTES) {
+        const { id, ...data } = note;
+        await setDoc(doc(db, "notes", id), data);
+      }
+      console.log("✅ Successfully seeded default universal notes in Firestore.");
+    }
+    
+    // Seed default config
+    const configDocRef = doc(db, "system_config", "main");
+    const configDoc = await getDoc(configDocRef);
+    if (!configDoc.exists()) {
+      await setDoc(configDocRef, DEFAULT_CONFIG);
+      console.log("✅ Seeded default system configuration in Firestore.");
+    }
+  } catch (err) {
+    console.warn("❌ Firestore seeding failed (probably running local dev without credentials)", err);
+  }
+}
+
+// Local files fallback backup helpers
 function readNotesFromFile(): any[] {
   try {
     if (fs.existsSync(NOTES_FILE_PATH)) {
       const data = fs.readFileSync(NOTES_FILE_PATH, "utf8");
       return JSON.parse(data);
     } else {
-      // Create file with defaults
-      fs.writeFileSync(NOTES_FILE_PATH, JSON.stringify(DEFAULT_NOTES, null, 2), "utf8");
-      return DEFAULT_NOTES;
+      fs.writeFileSync(NOTES_FILE_PATH, JSON.stringify(DEFAULT_UNIVERSAL_NOTES, null, 2), "utf8");
+      return DEFAULT_UNIVERSAL_NOTES;
     }
   } catch (err) {
-    console.error("Error reading notes file:", err);
-    return DEFAULT_NOTES;
+    return DEFAULT_UNIVERSAL_NOTES;
   }
 }
 
-// Helper to write notes
 function writeNotesToFile(notes: any[]) {
   try {
     fs.writeFileSync(NOTES_FILE_PATH, JSON.stringify(notes, null, 2), "utf8");
   } catch (err) {
-    console.error("Error writing notes file:", err);
+    console.error("Error backing up notes locally:", err);
   }
 }
-
-// API Routes for User Notes
-app.get("/api/notes", (req, res) => {
-  const notes = readNotesFromFile();
-  res.json(notes);
-});
-
-app.post("/api/notes", (req, res) => {
-  try {
-    const { title, content, subjectName, subjectCode, topicName, uploaderName, uploaderRole, uploaderEmail } = req.body;
-    
-    if (!title || !content || !subjectName || !uploaderName) {
-      return res.status(400).json({ error: "Missing required note details (title, content, subject, uploader name)" });
-    }
-
-    const notes = readNotesFromFile();
-    const newNote = {
-      id: "note-" + Date.now(),
-      title,
-      content,
-      subjectName,
-      subjectCode: subjectCode || "GEN-DB",
-      topicName: topicName || "General Database Concept",
-      uploaderName,
-      uploaderRole: uploaderRole || "Student",
-      uploaderEmail: uploaderEmail || "",
-      uploadedAt: new Date().toISOString(),
-      likes: 0
-    };
-
-    notes.unshift(newNote); // Put newest notes at the top
-    writeNotesToFile(notes);
-
-    res.status(201).json(newNote);
-  } catch (err: any) {
-    console.error("Error adding note:", err);
-    res.status(500).json({ error: "Failed to upload your study note." });
-  }
-});
-
-app.post("/api/notes/:id/like", (req, res) => {
-  try {
-    const { id } = req.params;
-    const notes = readNotesFromFile();
-    const noteIndex = notes.findIndex(n => n.id === id);
-    if (noteIndex !== -1) {
-      notes[noteIndex].likes = (notes[noteIndex].likes || 0) + 1;
-      writeNotesToFile(notes);
-      return res.json(notes[noteIndex]);
-    }
-    res.status(404).json({ error: "Note not found" });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to like note" });
-  }
-});
-
-// GLOBAL SYSTEM CONFIGURATION & CONTROLS FOR THE APP
-const CONFIG_FILE_PATH = path.join(process.cwd(), "system_config.json");
-const DEFAULT_CONFIG = {
-  announcement: "🎓 Welcome to Notsopedia Hub! Check out the real-time PL/SQL simulator and peer study archives.",
-  announcementActive: true,
-  enableSimulator: true,
-  enableSubmissions: true
-};
 
 function readConfigFromFile(): any {
   try {
@@ -167,77 +170,249 @@ function writeConfigToFile(config: any) {
   try {
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), "utf8");
   } catch (err) {
-    console.error("Error writing config file:", err);
+    console.error("Error backing up config locally:", err);
   }
 }
 
-// Get global config settings
-app.get("/api/system/config", (req, res) => {
+// ----------------- API ENDPOINTS -----------------
+
+// 1. GET ALL NOTES (with real-time Firestore fetch)
+app.get("/api/notes", async (req, res) => {
+  if (useFirestore && db) {
+    try {
+      const snapshot = await getDocs(collection(db, "notes"));
+      const notes: any[] = [];
+      snapshot.forEach(doc => {
+        notes.push({ id: doc.id, ...doc.data() });
+      });
+      // Sort newest first
+      notes.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
+      
+      if (notes.length > 0) {
+        // Keep local backup synchronized
+        writeNotesToFile(notes);
+        return res.json(notes);
+      }
+    } catch (err) {
+      console.warn("Firestore fetch notes failed, using offline file backup.", err);
+    }
+  }
+  // Fallback to local files
+  res.json(readNotesFromFile());
+});
+
+// 2. CREATE A NOTE (with instant Firestore write)
+app.post("/api/notes", async (req, res) => {
+  try {
+    const { title, content, subjectName, subjectCode, topicName, uploaderName, uploaderRole, uploaderEmail } = req.body;
+    
+    if (!title || !content || !subjectName || !uploaderName) {
+      return res.status(400).json({ error: "Missing required note details (title, content, subject, uploader name)" });
+    }
+
+    const newId = "note-" + Date.now();
+    const newNote = {
+      title,
+      content,
+      subjectName,
+      subjectCode: subjectCode || "GEN-ACAD",
+      topicName: topicName || "General Topic",
+      uploaderName,
+      uploaderRole: uploaderRole || "Student",
+      uploaderEmail: uploaderEmail || "",
+      uploadedAt: new Date().toISOString(),
+      likes: 0
+    };
+
+    if (useFirestore && db) {
+      try {
+        await setDoc(doc(db, "notes", newId), newNote);
+        console.log(`✅ Permanent storage written: Saved note ${newId} to Firestore.`);
+      } catch (err) {
+        console.error("Failed to write to Cloud Firestore, fallback to local files.", err);
+      }
+    }
+
+    // Sync to local files regardless
+    const localNotes = readNotesFromFile();
+    localNotes.unshift({ id: newId, ...newNote });
+    writeNotesToFile(localNotes);
+
+    res.status(201).json({ id: newId, ...newNote });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to upload study note." });
+  }
+});
+
+// 3. LIKE A NOTE (with dynamic Firestore transaction)
+app.post("/api/notes/:id/like", async (req, res) => {
+  const { id } = req.params;
+  let success = false;
+
+  if (useFirestore && db) {
+    try {
+      const docRef = doc(db, "notes", id);
+      await runTransaction(db, async (transaction) => {
+        const sfDoc = await transaction.get(docRef);
+        if (sfDoc.exists()) {
+          const currentLikes = sfDoc.data()?.likes || 0;
+          transaction.update(docRef, { likes: currentLikes + 1 });
+          success = true;
+        }
+      });
+    } catch (err) {
+      console.error("Firestore transaction like failed, using offline file modification.", err);
+    }
+  }
+
+  // Update local backup
+  const localNotes = readNotesFromFile();
+  const index = localNotes.findIndex(n => n.id === id);
+  if (index !== -1) {
+    localNotes[index].likes = (localNotes[index].likes || 0) + 1;
+    writeNotesToFile(localNotes);
+    return res.json(localNotes[index]);
+  }
+
+  if (success) {
+    return res.json({ id, status: "liked" });
+  }
+  res.status(404).json({ error: "Note not found" });
+});
+
+// 4. DELETE A NOTE (Administrator moderation option)
+app.delete("/api/notes/:id", async (req, res) => {
+  const { id } = req.params;
+  let deleted = false;
+
+  if (useFirestore && db) {
+    try {
+      await deleteDoc(doc(db, "notes", id));
+      deleted = true;
+      console.log(`✅ Note ${id} deleted from Cloud Firestore permanently.`);
+    } catch (err) {
+      console.error("Firestore delete note failed.", err);
+    }
+  }
+
+  const localNotes = readNotesFromFile();
+  const filtered = localNotes.filter(n => n.id !== id);
+  if (localNotes.length !== filtered.length) {
+    writeNotesToFile(filtered);
+    deleted = true;
+  }
+
+  if (deleted) {
+    return res.json({ success: true, id });
+  }
+  res.status(404).json({ error: "Note not found" });
+});
+
+// 5. UPDATE A NOTE (Administrator moderation edits)
+app.put("/api/notes/:id", async (req, res) => {
+  const { id } = req.params;
+  const { title, content, subjectName, subjectCode, topicName, uploaderName, uploaderRole, uploaderEmail } = req.body;
+  let updated = false;
+
+  const updateFields: any = {};
+  if (title) updateFields.title = title;
+  if (content) updateFields.content = content;
+  if (subjectName) updateFields.subjectName = subjectName;
+  if (subjectCode) updateFields.subjectCode = subjectCode;
+  if (topicName) updateFields.topicName = topicName;
+  if (uploaderName) updateFields.uploaderName = uploaderName;
+  if (uploaderRole) updateFields.uploaderRole = uploaderRole;
+  if (uploaderEmail !== undefined) updateFields.uploaderEmail = uploaderEmail;
+
+  if (useFirestore && db) {
+    try {
+      await updateDoc(doc(db, "notes", id), updateFields);
+      updated = true;
+      console.log(`✅ Note ${id} updated in Cloud Firestore permanently.`);
+    } catch (err) {
+      console.error("Firestore update note failed.", err);
+    }
+  }
+
+  const localNotes = readNotesFromFile();
+  const index = localNotes.findIndex(n => n.id === id);
+  if (index !== -1) {
+    localNotes[index] = { ...localNotes[index], ...updateFields };
+    writeNotesToFile(localNotes);
+    return res.json(localNotes[index]);
+  }
+
+  if (updated) {
+    return res.json({ id, ...updateFields });
+  }
+  res.status(404).json({ error: "Note not found" });
+});
+
+// 6. SYSTEM CONFIGURATION GET & UPDATE (with live Firestore sync)
+app.get("/api/system/config", async (req, res) => {
+  if (useFirestore && db) {
+    try {
+      const configDocRef = doc(db, "system_config", "main");
+      const configDoc = await getDoc(configDocRef);
+      if (configDoc.exists()) {
+        const data = configDoc.data();
+        writeConfigToFile(data);
+        return res.json(data);
+      }
+    } catch (err) {
+      console.warn("Firestore config read failed, using offline backup.");
+    }
+  }
   res.json(readConfigFromFile());
 });
 
-// Update global config settings (Allows controlling the app)
-app.post("/api/system/config", (req, res) => {
+app.post("/api/system/config", async (req, res) => {
   try {
-    const current = readConfigFromFile();
-    const updated = { ...current, ...req.body };
+    const currentLocal = readConfigFromFile();
+    const updated = { ...currentLocal, ...req.body };
+
+    if (useFirestore && db) {
+      try {
+        await setDoc(doc(db, "system_config", "main"), updated);
+        console.log("✅ Updated system configuration in Cloud Firestore permanently.");
+      } catch (err) {
+        console.error("Firestore config write failed.", err);
+      }
+    }
+
     writeConfigToFile(updated);
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: "Failed to update configuration settings" });
+    res.status(500).json({ error: "Failed to update system configuration" });
   }
 });
 
-// Delete note Admin endpoint
-app.delete("/api/notes/:id", (req, res) => {
+// 7. FACTORY RESET NOTES TO DEFAULT
+app.post("/api/notes/reset", async (req, res) => {
   try {
-    const { id } = req.params;
-    const notes = readNotesFromFile();
-    const filtered = notes.filter(n => n.id !== id);
-    if (notes.length !== filtered.length) {
-      writeNotesToFile(filtered);
-      return res.json({ success: true, id });
+    if (useFirestore && db) {
+      try {
+        // Clear old notes collection
+        const snapshot = await getDocs(collection(db, "notes"));
+        const batch = writeBatch(db);
+        snapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        await batch.commit();
+
+        // Seed fresh ones
+        for (const note of DEFAULT_UNIVERSAL_NOTES) {
+          const { id, ...data } = note;
+          await setDoc(doc(db, "notes", id), data);
+        }
+        console.log("✅ Firestore notes factory reset completed.");
+      } catch (err) {
+        console.error("Firestore factory reset failed.", err);
+      }
     }
-    res.status(404).json({ error: "Note not found" });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to delete note" });
-  }
-});
 
-// Edit/Update note Admin endpoint
-app.put("/api/notes/:id", (req, res) => {
-  try {
-    const { id } = req.params;
-    const { title, content, subjectName, subjectCode, topicName, uploaderName, uploaderRole, uploaderEmail } = req.body;
-    
-    const notes = readNotesFromFile();
-    const noteIndex = notes.findIndex(n => n.id === id);
-    if (noteIndex !== -1) {
-      notes[noteIndex] = {
-        ...notes[noteIndex],
-        title: title || notes[noteIndex].title,
-        content: content || notes[noteIndex].content,
-        subjectName: subjectName || notes[noteIndex].subjectName,
-        subjectCode: subjectCode || notes[noteIndex].subjectCode,
-        topicName: topicName || notes[noteIndex].topicName,
-        uploaderName: uploaderName || notes[noteIndex].uploaderName,
-        uploaderRole: uploaderRole || notes[noteIndex].uploaderRole,
-        uploaderEmail: uploaderEmail !== undefined ? uploaderEmail : notes[noteIndex].uploaderEmail
-      };
-      writeNotesToFile(notes);
-      return res.json(notes[noteIndex]);
-    }
-    res.status(404).json({ error: "Note not found" });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to update note" });
-  }
-});
-
-// Reset notes to default state
-app.post("/api/notes/reset", (req, res) => {
-  try {
-    writeNotesToFile(DEFAULT_NOTES);
-    res.json(DEFAULT_NOTES);
+    writeNotesToFile(DEFAULT_UNIVERSAL_NOTES);
+    res.json(DEFAULT_UNIVERSAL_NOTES);
   } catch (err) {
     res.status(500).json({ error: "Failed to reset database" });
   }
@@ -245,12 +420,11 @@ app.post("/api/notes/reset", (req, res) => {
 
 // Lazy-initialized Gemini Client
 let aiClient: GoogleGenAI | null = null;
-
 function getGemini(): GoogleGenAI {
   if (!aiClient) {
     const key = process.env.GEMINI_API_KEY;
     if (!key) {
-      throw new Error("GEMINI_API_KEY environment variable is required. Please set it in Settings > Secrets.");
+      throw new Error("GEMINI_API_KEY environment variable is required. Set it in Settings > Secrets.");
     }
     aiClient = new GoogleGenAI({
       apiKey: key,
@@ -264,99 +438,143 @@ function getGemini(): GoogleGenAI {
   return aiClient;
 }
 
-// API Health Check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", time: new Date().toISOString() });
-});
-
-// AI Tutor Endpoint for Explanations & Custom Answers
-app.post("/api/tutor/explain", async (req, res) => {
+// 8. UNIVERSAL AI DISCOVERY & EXPLAINER (with optional real-time search grounding!)
+app.post("/api/ai/ask", async (req, res) => {
   try {
-    const { topic, format, additionalPrompt } = req.body;
-    if (!topic) {
-      return res.status(400).json({ error: "Topic is required" });
+    const { question, mode, noteContext } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: "Question is required" });
     }
 
-    const ai = getGemini();
-    
-    let prompt = "";
-    if (format === "exam-answer") {
-      prompt = `Act as an expert RDBMS professor and textbook author. The user is preparing for their university theory exam tomorrow.
-Provide a complete, full-marks, 5-mark exam-style answer for the topic: "${topic}".
-You MUST write the response in this exact order and format (using clear Markdown formatting, headings, bullet points, and code/syntax boxes where applicable):
+    let responseText = "";
+    let sources: any[] = [];
+    let isFallback = false;
+    let geminiErrorDetail = "";
 
-1. **Definition**: A clear, concise, 2-3 sentence definition.
-2. **Syntax (if applicable)**: Provide the correct SQL/PLSQL syntax inside a formatted code block. If not applicable to this topic, provide an architectural or mathematical model description.
-3. **Types / Features**: A structured list of sub-types or main features, explained in detail.
-4. **Advantages / Importance**: A clean bulleted list of advantages of using this concept.
-5. **Practical Example**: Provide a complete, fully-functional, and realistic SQL or PL/pgSQL example matching standard PostgreSQL or RDBMS environments. Keep it correct, illustrative, and clean.
-
-Additional constraints or requests: ${additionalPrompt || "None"}.
-Ensure the content is deep, professional, and directly ready to be written in a university exam.`;
-    } else if (format === "quiz-viva") {
-      prompt = `Act as an RDBMS Viva-Voce Examiner. Generate a set of 5 highly expected viva/interview questions for the topic or unit: "${topic}".
-For each question, provide:
-1. The question.
-2. The expected "ideal" answer that will impress the external examiner.
-3. A quick "pro tip" or keyword they must mention.
-Format nicely in Markdown with clear headings or bulleted structures.`;
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+      console.warn("⚠️ GEMINI_API_KEY is not defined. Initiating offline academic search fallback.");
+      isFallback = true;
     } else {
-      prompt = `Provide a detailed revision note for: "${topic}". Keep it highly structured, professional, and clear. Incorporate diagrams or flowcharts using ascii/text drawings if helpful. Additional instruction: ${additionalPrompt || "none"}`;
+      try {
+        const ai = getGemini();
+        let prompt = "";
+        let useGrounding = false;
+
+        if (mode === "news-gk") {
+          useGrounding = true;
+          prompt = `You are the Notsopedia Live Global AI Agent, connected to real-time search streams.
+The user is asking a general knowledge, world news, or up-to-the-minute question: "${question}".
+Use Google Search grounding to retrieve the absolute latest and most accurate current events.
+Write a structured, elegant, informative response using Markdown.
+Conclude with a brief '🔍 Live Fact-Check & Data Sources' section detailing the retrieved facts.`;
+        } else if (mode === "notes-expert") {
+          prompt = `You are the Notsopedia Academic Librarian & Smart Search Engine.
+The student is asking: "${question}" based on study materials and notes in our repository.
+
+Here is the exact contextual content retrieved from user-uploaded notes:
+${noteContext || "No context materials provided. Please use your deep academic knowledge base to answer fully instead."}
+
+Analyze the note context and formulate a precise, highly-organized explanation. Supplement any gaps using your native academic intelligence, making sure to highlight if any information is sourced directly from their uploaded notes.`;
+        } else {
+          // Study Companion / Exam Prep Mode
+          prompt = `You are the Notsopedia Masterclass Grader & Exam Study Buddy.
+The student asks: "${question}".
+Draft a comprehensive, premium-grade university level textbook-style answer.
+Incorporate:
+1. **Rigor Definition**: Concise, highly professional definitions.
+2. **Key Core Mechanics / Formulas**: Detail any math models, code syntaxes, or logical paradigms in tidy boxes.
+3. **Deep Structural Analysis**: bulleted list of operations, components, or features.
+4. **Pros & Practical Importance**: Advantages and constraints in a table or list.
+5. **Practical Application / Case Study**: Provide a solved scenario or full-length descriptive example.`;
+        }
+
+        const config: any = {};
+        if (useGrounding) {
+          config.tools = [{ googleSearch: {} }];
+        }
+
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: prompt,
+          config: config
+        });
+
+        responseText = response.text || "";
+
+        // Parse Search grounding references if available
+        try {
+          const candidates = (response as any).candidates;
+          if (candidates && candidates[0]?.groundingMetadata?.groundingChunks) {
+            sources = candidates[0].groundingMetadata.groundingChunks
+              .map((chunk: any) => ({
+                title: chunk.web?.title || "Web Reference",
+                uri: chunk.web?.uri || "#"
+              }))
+              .filter((src: any) => src.uri !== "#");
+          }
+        } catch (e) {
+          // Grounding not supported/failed, ignored silently
+        }
+      } catch (geminiError: any) {
+        console.error("⚠️ Gemini API Call failed. Activating intelligent local fallback.", geminiError);
+        geminiErrorDetail = geminiError.message || String(geminiError);
+        isFallback = true;
+      }
     }
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
+    if (isFallback) {
+      const query = question.toLowerCase();
+      const matchedNotes = DEFAULT_UNIVERSAL_NOTES.filter(note => 
+        note.title.toLowerCase().includes(query) || 
+        note.content.toLowerCase().includes(query) ||
+        note.subjectName.toLowerCase().includes(query) ||
+        note.topicName.toLowerCase().includes(query)
+      );
+
+      if (geminiErrorDetail) {
+        responseText = `ℹ️ **Offline Study Assistant Active (API Call Failure)**  \n*Notsopedia tried to query the Gemini API with your configured GEMINI_API_KEY, but the API returned an error message:*  \n\n> **${geminiErrorDetail}**  \n\n*Please ensure your API Key is correct under Settings > Secrets. In the meantime, we have generated a local academic match:*  \n\n`;
+      } else {
+        responseText = `ℹ️ **Offline Study Assistant Active (API Key Not Configured)**  \n*Notsopedia was unable to connect to the live Gemini API (GEMINI_API_KEY is not configured inside AI Studio Settings). Once you configure it, the live tutor will be fully connected!*  \n\nHere is a local search response matched from our verified Academic Database:\n\n`;
+      }
+
+      if (matchedNotes.length > 0) {
+        const best = matchedNotes[0];
+        responseText += `### Sourced from Lecture Note: "${best.title}" (${best.subjectCode})\n*Uploaded by ${best.uploaderName} (${best.uploaderRole})*\n\n${best.content}`;
+        sources = matchedNotes.slice(0, 3).map(n => ({
+          title: `Local Note: ${n.title}`,
+          uri: `#local-note-${n.id}`
+        }));
+      } else {
+        responseText += `### Topic: "${question}"  \n\nNo exact matches found in local study files. However, our offline indexer has synthesized these study resources for you:\n\n1. **Recommended Study Plan**: Review **Graph Traversal (CS-201)** or **Quantum Mechanics (PHYS-402)** in the Note Explorer to see deep code samples and markdown equations.\n2. **Academic Blueprint**: Connect your profile above to upload peer-reviewed documents to automatically index them on this topic.\n3. **Quick Fact**: Graph traversals like DFS/BFS run in $O(V + E)$ complexity, while the Schrödinger equation describes quantum state wave mechanics via $\\hat{H}\\psi = E\\psi$.`;
+        sources = [
+          { title: "Universal Syllabus CS-201", uri: "#cs201" },
+          { title: "Quantum Physics PHYS-402", uri: "#phys402" }
+        ];
+      }
+    }
+
+    res.json({
+      text: responseText,
+      sources: sources
     });
 
-    res.json({ text: response.text });
   } catch (error: any) {
-    console.error("Gemini API Error:", error);
+    console.error("General AI explainer error:", error);
     res.status(500).json({ error: error.message || "Failed to generate AI response" });
   }
 });
 
-// AI Evaluate Answer Endpoint (for mock tests)
-app.post("/api/tutor/evaluate", async (req, res) => {
-  try {
-    const { question, userAnswer } = req.body;
-    if (!question || !userAnswer) {
-      return res.status(400).json({ error: "Question and User Answer are required" });
-    }
-
-    const ai = getGemini();
-
-    const prompt = `Act as an RDBMS university paper evaluator. A student has submitted an answer to the following question:
-Question: "${question}"
-Student's Answer: "${userAnswer}"
-
-Analyze their answer and provide a highly constructive, detailed feedback report. Format the output in JSON format with the following keys:
-- "score": A score out of 5 (integer, e.g. 1 to 5). Be realistic but encouraging.
-- "verdict": A 1-sentence verdict (e.g., "Excellent start, but missing syntax details").
-- "strengths": A string array listing what they did well.
-- "gaps": A string array listing what they missed (e.g., failed to explain ACID fully, missing semicolon in trigger syntax).
-- "modelAnswer": The perfect full-marks exam-style answer containing: Definition, Syntax, Types, Advantages, and an Example.
-
-Return ONLY a valid JSON object matching this schema. Do not enclose it in markdown code blocks like \`\`\`json. Just raw JSON string.`;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      }
-    });
-
-    const resultText = response.text ? response.text.trim() : "{}";
-    res.json(JSON.parse(resultText));
-  } catch (error: any) {
-    console.error("Gemini API Error:", error);
-    res.status(500).json({ error: error.message || "Failed to evaluate answer" });
-  }
+// API Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", firestore: useFirestore, time: new Date().toISOString() });
 });
 
 // Setup Vite or Production Static Serving
 async function startServer() {
+  // Ensure seed run at startup
+  await seedFirestoreIfNeeded();
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -371,9 +589,15 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Notsopedia Hub backend server booted successfully on port ${PORT}`);
+    });
+  } else {
+    console.log("☁️ Running on Vercel serverless environment. Dynamic port binding skipped.");
+  }
 }
 
 startServer();
+
+export default app;
